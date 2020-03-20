@@ -1,0 +1,112 @@
+#!/usr/bin/env python
+
+import rospy
+import numpy as np
+from graduation_project_simulation.msg import joystickControl
+from sensor_msgs.msg import Joy
+
+
+STEERING_AXIS = 0
+THROTTLE_AXIS = 5
+
+SQUARE = 0
+CROSS = 1
+CIRCLE = 2
+TRIANGLE = 3
+L1 = 4
+R1 = 5
+L2 = 6
+R2 = 7
+
+
+class Translator:
+	def __init__(self, topic_from, topic_to):
+		self._joystick_subscriber = rospy.Subscriber(topic_from, Joy, self.joystick_callback)
+		self._joystick_publisher = rospy.Publisher(topic_to, joystickControl, queue_size=1)
+		self._last_published_time = rospy.get_rostime()
+		self._last_published = None
+		self._cruise_control_state = False
+		self._circle_flag = True
+		self._R1_flag = False
+		self._L1_flag = False
+		self._cruise_control_speed = 0
+		self._MAX_SPEED = 40
+		self.timer = rospy.Timer(rospy.Duration(1./20.), self.timer_callback)
+        
+	def timer_callback(self, event):
+		if self._last_published and self._last_published_time < rospy.get_rostime() + rospy.Duration(1.0/20.):
+			self.joystick_callback(self._last_published)
+
+	def joystick_callback(self, message):
+		rospy.logdebug("joy_translater received axes %s",message.axes)
+		# Create message object
+		command = joystickControl()
+		# Set Header
+		command.header = message.header
+
+		# Get throttle/breaking value
+		if message.axes[THROTTLE_AXIS] >= 0:
+			command.throttle = message.axes[THROTTLE_AXIS]
+			command.brake = 0.0
+		else:
+			command.brake = message.axes[THROTTLE_AXIS] * -1
+			command.throttle = 0.0
+
+		# Get steering value
+		command.steer = message.axes[STEERING_AXIS]
+
+		# Get gears value
+		if message.buttons[TRIANGLE]:
+			command.shift_gears = joystickControl.FORWARD
+		elif message.buttons[CROSS]:
+			command.shift_gears = joystickControl.NEUTRAL
+		elif message.buttons[SQUARE]:
+			command.shift_gears = joystickControl.REVERSE
+		else:
+			command.shift_gears = joystickControl.NO_COMMAND
+
+		# Get cruise control state and value
+		if message.buttons[CIRCLE] and self._circle_flag:
+			self._circle_flag = False
+			self._cruise_control_state = not self._cruise_control_state
+		elif not message.buttons[CIRCLE]:
+			self._circle_flag = True
+			
+		if self._cruise_control_state:
+			command.cruise_control = joystickControl.CRUISE_CONTROL_ON
+
+		else:
+			command.cruise_control = joystickControl.CRUISE_CONTROL_OFF
+
+
+		if message.buttons[R1] and self._R1_flag:
+			self._R1_flag = False
+			if self._cruise_control_speed < self._MAX_SPEED:
+				self._cruise_control_speed += 1
+		elif not message.buttons[R1]:
+			self._R1_flag = True
+
+		if message.buttons[L1] and self._L1_flag:
+			self._L1_flag = False
+			if self._cruise_control_speed > 0:
+				self._cruise_control_speed -= 1
+		elif not message.buttons[L1]:
+			self._L1_flag = True
+
+		command.cruise_control_speed = self._cruise_control_speed
+
+		self._last_published = message
+		self._joystick_publisher.publish(command)
+	
+def main():
+	TOPIC_FROM = "joy"
+	TOPIC_TO = "joystick_control"
+	rospy.init_node('joy_translator')
+	t = Translator(TOPIC_FROM, TOPIC_TO)
+
+	while not rospy.is_shutdown():
+		rospy.spin()
+	
+
+if __name__ == '__main__':
+	main()

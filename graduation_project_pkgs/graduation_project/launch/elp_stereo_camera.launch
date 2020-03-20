@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+
+<launch>
+	<!--Tested on ELP sync device: ELP-960P2CAM-V90-VC -->
+	<arg name="CAMERA_NAME" default="elp" />
+	<arg name="DEVICE" default="/dev/video1" />
+
+	<!-- Combined width of two images in single reported image, each are 1280x960 -->
+	<arg name="WIDTH" default="1280" />
+	<arg name="HEIGHT" default="480" />
+	<arg name="FRAMERATE" default="30" />  <!-- max 60fps for ELP-960P2CAM-V90-VC -->
+
+	<!-- start the cameras -->
+	<node respawn="true" pkg="usb_cam" type="usb_cam_node" name="usb_cam">
+	<param name="video_device" value="$(arg DEVICE)" type="string"/>
+	<param name="pixel_format" value="mjpeg" type="string"/>
+	<param name="image_width" value="$(arg WIDTH)" type="int"/>
+	<param name="image_height" value="$(arg HEIGHT)" type="int"/>
+	<param name="framerate" value="$(arg FRAMERATE)" type="int"/>
+	<param name="camera_name" value="$(arg CAMERA_NAME)_sync" type="string"/>
+	<param name="camera_frame_id" value="$(arg CAMERA_NAME)_sync_optical_frame" type="string"/>
+	</node>
+
+	<!-- Calibration node -->
+	<node name="calibrator" pkg="graduation_project" type="calibrator.py">
+	<param name="calibration_file" value="/home/gradproj2020/catkin_ws/src/graduation_project/scripts/calibrator/Calibration Matrix.npz" type="string"/>
+	<param name="camera_width" value="$(arg WIDTH)" type="int"/>
+	<param name="camera_height" value="$(arg HEIGHT)" type="int"/>
+	</node>
+
+	<!-- Object detection node -->
+	<node name="object_detection" pkg="graduation_project" type="object_detection.py">
+	<param name="network" value="ssd-mobilenet-v2" type="string"/>
+	<param name="labels_file" value="/home/gradproj2020/catkin_ws/src/graduation_project/scripts/object_detection/networks/SSD-Mobilenet-v2/ssd_coco_labels.txt" type="string"/>
+	</node>s
+	
+
+</launch>
+
